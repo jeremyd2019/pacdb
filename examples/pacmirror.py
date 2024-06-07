@@ -1,28 +1,68 @@
 #!/usr/bin/env python
 
+import argparse
 import os
 import pacdb
+# TODO: urlretrieve seems quite slow... possibly because urllib doesn't do
+# persistent http connections.  investigate other libraries (requests?)
 from urllib.request import urlretrieve
+from urllib.error import HTTPError
 
-clangarm64 = pacdb.mingw_db_by_name('clangarm64')
+parser = argparse.ArgumentParser(description='Mirror pacakges from a pacman sync db')
+parser.add_argument('-e', '--repo', required=True, help='pacman repo name to mirror')
+parser.add_argument('-v', '--verbose', action='count', help='output additional information')
+parser.add_argument('url', help='source url')
+parser.add_argument('dir', help='destination dir')
 
-files = set()
-for pkg in clangarm64:
-    files.add(pkg.filename)
-    url = "{}/{}".format(pkg.db.url, pkg.filename)
-    filename = os.path.join("clangarm64", pkg.filename)
+options = parser.parse_args()
+
+db = pacdb.Database.from_url(options.repo, options.url)
+
+
+def fetch_file(url, filename, expected_size=None):
+    fetch = True
     try:
         s = os.stat(filename)
-        if s.st_size == pkg.download_size:
-            continue
+        if expected_size is None or s.st_size == expected_size:
+            fetch = False
     except FileNotFoundError:
         pass
-    print(f"{url} -> {filename}")
-    urlretrieve(url, filename)
+    if fetch:
+        if options.verbose:
+            print(f"{url} -> {filename}")
+        urlretrieve(url, filename)
 
-toremove = [f for f in os.listdir("clangarm64") if f not in files]
-#print(toremove)
+files = set()
+# unfortunately, I don't think there's any way to know the .tar.X extension,
+# so just get the straight .db and .files without the extra extensions
+for t in (".db", ".files"):
+    files.add(options.repo + t)
+    url = "{}/{}".format(db.url, options.repo + t)
+    filename = os.path.join(options.dir, options.repo + t)
+    fetch_file(url, filename, -1)
+    try:
+        fetch_file(url+".sig", filename+".sig", -1)
+        files.add(options.repo + t + ".sig")
+    except HTTPError as e:
+        if options.verbose:
+            print(f"Warning: error retrieving {url}: {e}")
+
+for pkg in db:
+    files.add(pkg.filename)
+    url = "{}/{}".format(pkg.db.url, pkg.filename)
+    filename = os.path.join(options.dir, pkg.filename)
+    fetch_file(url, filename, pkg.download_size)
+    try:
+        fetch_file(url+".sig", filename+".sig")
+        files.add(pkg.filename + ".sig")
+    except HTTPError as e:
+        if options.verbose:
+            print(f"Warning: error retrieving {url}: {e}")
+
+toremove = [f for f in os.listdir(options.dir) if f not in files]
+if options.verbose:
+    print(toremove)
 
 for f in toremove:
-    os.unlink(os.path.join("clangarm64", f))
+    os.unlink(os.path.join(options.dir, f))
 
