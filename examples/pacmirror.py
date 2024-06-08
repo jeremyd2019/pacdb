@@ -3,12 +3,13 @@
 import argparse
 import os
 import pacdb
+import sys
 # TODO: urlretrieve seems quite slow... possibly because urllib doesn't do
 # persistent http connections.  investigate other libraries (requests?)
 from urllib.request import urlretrieve
 from urllib.error import HTTPError
 
-parser = argparse.ArgumentParser(description='Mirror pacakges from a pacman sync db')
+parser = argparse.ArgumentParser(description='Mirror packages from a pacman sync db')
 parser.add_argument('-e', '--repo', required=True, help='pacman repo name to mirror')
 parser.add_argument('-v', '--verbose', action='count', help='output additional information')
 parser.add_argument('url', help='source url')
@@ -29,7 +30,7 @@ def fetch_file(url, filename, expected_size=None):
         pass
     if fetch:
         if options.verbose:
-            print(f"{url} -> {filename}")
+            print(f"{url} -> {filename}", file=sys.stderr)
         urlretrieve(url, filename)
 
 files = set()
@@ -45,7 +46,7 @@ for t in (".db", ".files"):
         files.add(options.repo + t + ".sig")
     except HTTPError as e:
         if options.verbose:
-            print(f"Warning: error retrieving {url}: {e}")
+            print(f"Warning: error retrieving {url}: {e}", file=sys.stderr)
 
 for pkg in db:
     files.add(pkg.filename)
@@ -57,11 +58,11 @@ for pkg in db:
         files.add(pkg.filename + ".sig")
     except HTTPError as e:
         if options.verbose:
-            print(f"Warning: error retrieving {url}: {e}")
+            print(f"Warning: error retrieving {url}: {e}", file=sys.stderr)
 
 toremove = [f for f in os.listdir(options.dir) if f not in files]
-if options.verbose:
-    print(toremove)
+if options.verbose and toremove:
+    print("Removing:", "\n\t".join(toremove), sep="\n\t", file=sys.stderr)
 
 for f in toremove:
     os.unlink(os.path.join(options.dir, f))
