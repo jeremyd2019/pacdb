@@ -42,7 +42,9 @@ for t in (".db", ".files"):
     filename = os.path.join(options.dir, options.repo + t)
     fetch_file(url, filename, -1)
     try:
-        fetch_file(url+".sig", filename+".sig", -1)
+        url+=".sig"
+        filename+=".sig"
+        fetch_file(url, filename, -1)
         files.add(options.repo + t + ".sig")
     except HTTPError as e:
         if options.verbose:
@@ -54,7 +56,9 @@ for pkg in db:
     filename = os.path.join(options.dir, pkg.filename)
     fetch_file(url, filename, pkg.download_size)
     try:
-        fetch_file(url+".sig", filename+".sig")
+        url+=".sig"
+        filename+=".sig"
+        fetch_file(url, filename)
         files.add(pkg.filename + ".sig")
     except HTTPError as e:
         if options.verbose:
